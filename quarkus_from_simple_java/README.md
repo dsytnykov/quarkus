@@ -152,7 +152,7 @@ mvn quarkus:dev
 ```xml
 <dependency>
   <groupId>io.quarkus</groupId>
-  <artifactId>quarkus-resteasy-reactive</artifactId>
+  <artifactId>quarkus-rest</artifactId>
 </dependency>
 ```
 
