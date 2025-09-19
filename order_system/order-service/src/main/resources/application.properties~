@@ -1,0 +1,12 @@
+
+quarkus.rest-client.user-api.url=http://user-service:8080
+quarkus.oidc.auth-server-url=http://keycloak:8080/realms/quarkus-realm
+quarkus.oidc.client-id=order-service
+
+kafka.bootstrap.servers=my-cluster-kafka-bootstrap.kafka:9092
+mp.messaging.outgoing.orders-out.connector=smallrye-kafka
+mp.messaging.outgoing.orders-out.topic=order.events
+
+quarkus.container-image.build=true
+quarkus.container-image.push=true
+quarkus.container-image.image=samou4ka/order-service:0.1.0
