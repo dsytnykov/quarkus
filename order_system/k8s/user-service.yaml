@@ -41,4 +41,4 @@ spec:
             - name: KAFKA_BOOTSTRAP_SERVERS
               value: my-cluster-kafka-bootstrap.kafka.svc.cluster.local:9092
             - name: QUARKUS_OIDC_AUTH_SERVER_URL
-              value: http://keycloak.keycloak.svc.cluster.local:8080/realms/quarkus-realm
+              value: http://keycloak.keycloak.svc.cluster.local/realms/quarkus-realm

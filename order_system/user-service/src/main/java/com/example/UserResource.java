@@ -24,6 +24,7 @@ public class UserResource {
     @POST
     @RolesAllowed({"user", "admin"})
     public Response create(User user, @Context UriInfo uriInfo) {
+        System.out.println(user);
         user.persist();
         userEmitter.send("""
                 {
