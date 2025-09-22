@@ -2,6 +2,7 @@ package com.example;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
@@ -28,6 +29,7 @@ public class OrderResource {
     Emitter<String> emitter;
 
     @POST
+    @Transactional
     public Response create(Order order) {
 
         var user = userClient.getUser(order.userId);
