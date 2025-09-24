@@ -1,5 +1,6 @@
 package com.example;
 
+import jakarta.annotation.security.PermitAll;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -31,7 +32,6 @@ public class UserResource {
     @RolesAllowed({"USER", "ADMIN"})
     @Transactional
     public Response create(User user, @Context UriInfo uriInfo) {
-        System.out.println(user);
         user.persist();
         userEmitter.send("""
                 {
@@ -42,6 +42,7 @@ public class UserResource {
         return Response.created(uriInfo.getAbsolutePathBuilder().path(user.id.toString()).build()).entity(user).build();
     }
 
+    @PermitAll
     @GET
     @Path("/{id}")
     public User get(@PathParam("id") Long id) {
