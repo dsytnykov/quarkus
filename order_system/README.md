@@ -63,12 +63,18 @@ mvn io.quarkus.platform:quarkus-maven-plugin:create \
 Start DB:
 
 ```bash
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm repo update
+
 helm install users-db bitnami/postgresql \
  --set global.postgresql.auth.username=demo_user \
  --set global.postgresql.auth.password=demo_pass \
  --set global.postgresql.auth.database=usersdb \
  --set global.postgresql.auth.postgresPassword=admin_pass
 ```
+
+This creates users-db-postgresql service. Quarkus quarkus.datasource.jdbc.url should point to users-db-postgresql.default.svc.cluster.local:5432 (or simply users-db-postgresql:5432 in the same namespace). Using the Bitnami chart is recommended for dev/test.
+https://travis.media/blog/installing-postgres-bitnami-helm-chart/?utm_source=chatgpt.com
 
 ## 3. Create Kafka
 
@@ -82,13 +88,26 @@ kubectl apply -f kafka-topics.yaml
 
 ## 4. Create Keycloak
 
-## 5. Build and push
+For dev/test use the Keycloak quickstart YAML:
 
-## 6. Command for quick testing
+```bash
+kubectl create ns keycloak
+kubectl apply -f https://raw.githubusercontent.com/keycloak/keycloak-quickstarts/main/kubernetes/keycloak.yaml -n keycloak
+```
 
-## 7. Troubleshooting
+That quickstart creates a single Keycloak instance (admin/admin). In production use the Keycloak Operator / Helm. - https://www.keycloak.org/getting-started/getting-started-kube?utm_source=chatgpt.com
 
-You can start keycloak like localhost:8080 and login admin/admin using those commands:
+### Configure realm
+
+1. Create realm `quarkus-realm`.
+
+2. Create a client `user-service` (OpenID client): usually set Access Type to confidential or public depending on your flow (for resource servers you simply need tokens to be validated). For testing you can use a public client plus password grant for test users (Grant type), or use client credentials.
+
+3. Create a test user alice and set a password. Mark the email as verified and password as not temporary. Give her role user.
+
+4. Create clients for `order-service` if you will call it with tokens.
+
+### Start keycloak like localhost:8080 and login admin/admin:
 
 1. Get the info for configuring (like port, etc.)
 
@@ -96,53 +115,140 @@ You can start keycloak like localhost:8080 and login admin/admin using those com
 kubectl get svc -n keycloak
 ```
 
-2. Forward to localhost
+2. Forward to localhost:8080
 
 ```bash
-kubectl port-forward svc/keycloak 8080:80 -n keycloak - and
+kubectl port-forward svc/keycloak 8080:80 -n keycloak
 ```
 
-To check it from user-service use: kubectl exec -it deploy/user-service -- curl -v http://keycloak.keycloak.svc.cluster.local/realms/quarkus-realm/.well-known/openid-configuration
+Open localhost:8080 and use admin/admin to come into a dashboard
 
-port 80
+To check that everything works from user-service use:
+
+```bash
+kubectl exec -it deploy/user-service -- curl -v http://keycloak.keycloak.svc.cluster.local/realms/quarkus-realm/.well-known/openid-configuration
+```
+
+## 5. Build and push
+
+To build a project you can use
+
+```bash
+./mvnw package -DskipTests
+
+docker push your-registry/your-user-service:0.1.0
+
+```
+
+I've used hub.docker.com and pushed through Docker Desktop interface
+
+You can have Quarkus generate Dockerfiles and build images locally with the Docker extension:
+
+```bash
+# from each service folder, e.g. user-service
+./mvnw package -Dquarkus.container-image.build=true \
+  -Dquarkus.container-image.image=your-registry/your-user-service:0.1.0
+```
+
+## 6. Deploy sequence
+
+Deploy sequence (recommended)
+
+1. Install Strimzi operator (namespace kafka) and create Kafka cluster + topics.
+
+2. Install Bitnami Postgres (helm install users-db bitnami/postgresql ...).
+
+3. Deploy Keycloak (quickstart or operator).
+
+4. Build images for each service and push to a registry accessible by the cluster (docker build / mvn -Dquarkus.container-image.build=true etc.)
+
+5. Create Kubernetes.
+
+6. Apply the service Deployments and Services.
+
+7. Check logs of notification-service — it should connect to Kafka and wait for messages.
+
+8. Use Keycloak to get a test token (password grant), call user-service or order-service with Authorization: Bearer <token> to exercise flow. You should see notification logs with created events.
+
+## 7. Command for quick testing
+
+### Testing in command line
+
+```bash
+
+kubectl apply -f user-service.yaml
+kubectl apply -f order-service.yaml
+kubectl apply -f notification-service.yaml
 
 TOKEN=$(curl -s \ -d "client_id=user-service" \
  -d "username=alice" \
  -d "password=alicepass" \
  -d "grant_type=password" \
- http://keycloak:8080/realms/quarkus-realm/protocol/openid-connect/token \
+ http://keycloak.keycloak.svc.cluster.local:80/realms/quarkus-realm/protocol/openid-connect/token \
  | grep -o '"access_token":"[^"]\*' | cut -d'"' -f4)
 
-kubectl exec -it <user-service-pod> -- curl -X POST http://user-service:8080/users -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"username":"bob","email":"bob@example.com"}'
-
-for quick test to receive a token:
-kubectl port-forward svc/keycloak 8080:80 -n keycloak
-and
-curl -X POST \
- http://localhost:8080/realms/quarkus-realm/protocol/openid-connect/token \
- -H "Content-Type: application/x-www-form-urlencoded" \
- -d "grant_type=password" \
- -d "client_id=user-service" \
- -d "username=alice" \
- -d "password=alicepass"
-
-kubectl scale deployment user-service --replicas=0
-
+# or from inside a pod
 TOKEN=$(kubectl exec -it <any-pod> -- curl -s \
  -d "client_id=user-service" \
  -d "username=alice" \
  -d "password=alicepass" \
  -d "grant_type=password" \
- http://keycloak.keycloak.svc.cluster.local:8080/realms/quarkus-realm/protocol/openid-connect/token \
+ http://keycloak.keycloak.svc.cluster.local:80/realms/quarkus-realm/protocol/openid-connect/token \
  | grep -o '"access_token":"[^"]\*' | cut -d'"' -f4)
+
 
 curl -X POST http://localhost:30080/users \
  -H "Authorization: Bearer $TOKEN" \
  -H "Content-Type: application/json" \
  -d '{"username":"alice","email":"alice@example.com"}'
 
-kubectl exec -it user-service-6d8bd8c647-l22ff -- curl -s -d "client_id=user-service" -d "username=alice" -d "password=alicepass" -d "grant_type=password" http://keycloak.keycloak.svc.cluster.local/realms/quarkus-realm/protocol/openid-connect/token | grep -o '"access_token":"[^"]\*' | cut -d'"' -f4
+# get pods
+kubectl get pods
 
+# check logs
+kubectl logs deploy/notification-service
+# or
+kubectl logs pod <pod>
+
+# scaling
+kubectl scale deployment user-service --replicas=0
+
+ # restart
+kubectl rollout restart deployment user-service
 ```
 
+### Testing from Postman
+
+It is configured a nodeport for user-service - 30080 and order-service - 30081. You can use localhost:30080 in postman with authentication.
+
+You can pick up an access token with using a command:
+
+```bash
+kubectl exec -it <service-pod> -- curl -s   -d "client_id=<clien-id>"  -d "username=alice"   -d "password=alicepass"   -d "grant_type=password"   http://keycloak.keycloak.svc.cluster.local/realms/quarkus-realm/protocol/openid-connect/token   | grep -o '"access_token":"[^"]*' | cut -d'"' -f4
 ```
+
+And use this token in postman with selecting 'Bearer Token' for authentication and pasting access token.
+
+For user service a body raw->json:
+
+```json
+{
+  "username": "alice",
+  "email": "alice@gmail.com"
+}
+```
+
+For order-service a body raw->json:
+
+```json
+{
+  "orderId": "1",
+  "userId": "1"
+}
+```
+
+## 8. Troubleshooting
+
+## 9. Future changes / ideas
+
+1. Configure authenticated service-to-service communication (for now it uses public /users/{id} endpoint)
