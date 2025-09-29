@@ -71,6 +71,10 @@ helm install users-db bitnami/postgresql \
  --set global.postgresql.auth.password=demo_pass \
  --set global.postgresql.auth.database=usersdb \
  --set global.postgresql.auth.postgresPassword=admin_pass
+
+# if necessary you can remove it and reinstall
+helm uninstall users-db
+kubectl delete pvc -l app.kubernetes.io/instance=users-db
 ```
 
 This creates users-db-postgresql service. Quarkus quarkus.datasource.jdbc.url should point to users-db-postgresql.default.svc.cluster.local:5432 (or simply users-db-postgresql:5432 in the same namespace). Using the Bitnami chart is recommended for dev/test.
@@ -219,7 +223,7 @@ kubectl rollout restart deployment user-service
 
 ### Testing from Postman
 
-It is configured a nodeport for user-service - 30080 and order-service - 30081. You can use localhost:30080 in postman with authentication.
+It is configured a nodeport for user-service - 30080 and order-service - 30081. You can use localhost:30080 in postman with `Authentication` header.
 
 You can pick up an access token with using a command:
 
@@ -247,8 +251,6 @@ For order-service a body raw->json:
 }
 ```
 
-## 8. Troubleshooting
-
-## 9. Future changes / ideas
+## 8. Future changes / ideas
 
 1. Configure authenticated service-to-service communication (for now it uses public /users/{id} endpoint)
